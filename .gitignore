@@ -1,0 +1,36 @@
+# dependencies and build output
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+coverage/
+.vite/
+
+# local state and secrets (never commit these)
+.aside-mobile/
+models.json
+*.secret
+*.token
+groupme.json
+clef.json
+push-vapid.json
+push-subs.json
+front-door/
+.next/
+feeds/
+issues.jsonl
+jev-ledger.json
+jev-cache.json
+settings.local.json
+
+# OS and editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.log
+*.tmp
+nul
+.env
+.env.*

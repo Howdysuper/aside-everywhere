@@ -1,0 +1,10 @@
+# Top-level packages, each release at least two weeks old when chosen. Python 3.12 or 3.13, Windows 10/11 x64.
+# The installer uses requirements.txt, generated from this file with exact versions and SHA-256 hashes:
+#   uv pip compile requirements.in --python-platform x86_64-pc-windows-msvc --python-version 3.12 --exclude-newer 2026-09-28 --generate-hashes -o requirements.txt
+PySide6==6.11.2
+numpy==2.5.3
+sounddevice==0.5.6
+openwakeword==0.6.0
+onnxruntime==1.30.0
+faster-whisper==1.2.1
+edge-tts==7.2.8

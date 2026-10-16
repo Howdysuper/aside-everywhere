@@ -1,0 +1,35 @@
+{
+  "name": "aside-miniapp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @aside-miniapp/server",
+    "dev:web": "npm run dev -w @aside-miniapp/web",
+    "build": "npm run build -w @aside-miniapp/web && npm run build -w @aside-miniapp/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test scripts/winservice.test.mjs",
+    "start": "node server/dist/index.js",
+    "initdata": "node scripts/dev-initdata.mjs",
+    "setup": "npm ci && npm run build && npm run doctor -- --setup",
+    "doctor": "node scripts/doctor.mjs",
+    "launchd": "node scripts/install-launchd.mjs",
+    "frontdoor": "node frontdoor/run.mjs",
+    "service": "node scripts/service.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "@types/web-push": "^3.6.4",
+    "web-push": "^3.6.7"
+  }
+}

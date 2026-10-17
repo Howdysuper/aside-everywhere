@@ -122,3 +122,25 @@ jobs:
           fi
       - name: Shell scripts parse
         run: for f in miniapp/frontdoor/*.sh; do bash -n "$f"; done
+
+  jarvis:
+    name: Jarvis (Windows voice assistant)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: jarvis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install the test runner
+        run: pip install pytest
+      - name: Install the app (hash-locked)
+        run: pip install --require-hashes -r requirements.txt
+      - name: Download the speech models
+        run: python -c "from heyaside import audio, config; audio.ensure_wake_models(); print('models ready')"
+      - name: Test
+        run: pytest tests -q
+        env:
+          QT_QPA_PLATFORM: offscreen

@@ -34,3 +34,7 @@ desktop.ini
 nul
 .env
 .env.*
+
+# local scratch
+ghlogin*
+.ghlogin-jobid

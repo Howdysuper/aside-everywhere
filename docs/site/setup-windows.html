@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jarvis setup (Windows) · Aside Everywhere</title>
+<meta name="description" content="Jarvis setup (Windows) - part of Aside Everywhere: Aside on your phone, Jarvis on your desktop, and the automation in between." />
+<style>
+  :root {
+    --bg: #fbfbfd; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73;
+    --line: rgba(0,0,0,0.10); --blue: #0b86ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); margin-bottom: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  header nav { display: flex; gap: 18px; flex-wrap: wrap; }
+  header nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+  header nav a.on { color: var(--blue); font-weight: 600; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.025em; line-height: 1.1; margin-bottom: 22px; }
+  h2 { font-size: 23px; letter-spacing: -0.015em; margin: 46px 0 14px; }
+  h3 { font-size: 17px; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  h4 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin-bottom: 16px; color: #2c2c2e; }
+  ul, ol { margin: 0 0 18px 22px; }
+  li { margin-bottom: 7px; color: #2c2c2e; }
+  a { color: var(--blue); }
+  code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; font-size: 0.88em; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 5px; }
+  pre { background: #101014; color: #e8e8ed; padding: 18px 20px; border-radius: 14px; overflow-x: auto; margin-bottom: 20px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+  blockquote { border-left: 3px solid var(--blue); background: var(--card); padding: 14px 18px; border-radius: 0 12px 12px 0; margin-bottom: 18px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  blockquote p { margin: 0; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 0.5px solid var(--line); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 0 60px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="index.html">Aside Everywhere</a>
+    <nav>
+      <a href="index.html">Walkthrough</a>
+      <a href="setup-iphone.html">iPhone</a>
+      <a href="setup-android.html">Android</a>
+      <a href="setup-windows.html">Jarvis</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Howdysuper/aside-everywhere">GitHub</a>
+    </nav>
+  </header>
+  <main>
+<h1>Jarvis setup (Windows)</h1>
+<p>Jarvis is the desktop half: say "Hey Jarvis" and he answers out loud, with a glowing capsule at the top of the screen that streams his words as he speaks them.</p>
+<h2>Install</h2>
+<pre><code>
+cd aside-everywhere\jarvis
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+</code></pre>
+<p>That does everything: a private Python environment, the hash-locked packages, the wake-word and speech models, the Start menu entry, and the login item.</p>
+<p>Requires Python 3.12 or 3.13 (<code>winget install Python.Python.3.13</code>).</p>
+<h2>Using it</h2>
+<ul>
+<li><strong>Start menu</strong>: type "Jarvis" and open it. It starts in the system tray and runs in the background.</li>
+<li><strong>Tray icon</strong>: right-click for Talk now, Mute, Hide the island, Settings, and Quit.</li>
+<li><strong>Hotkey</strong>: <code>Ctrl+Alt+J</code> starts a conversation without the wake word.</li>
+<li><strong>The island</strong>: click once to talk, click four times quickly to put it away and go back to the tray.</li>
+<li>It wakes for "Hey Jarvis" (and understands "hey aside" and similar once transcribing).</li>
+</ul>
+<h2>What happens when you talk</h2>
+<pre><code>
+wake word ──▶ listen ──▶ transcribe on this PC ──▶ what kind of question?
+                                                   │
+                        ┌──────────────────────────┼──────────────────────────┐
+                        │                          │                          │
+                   math, units,              general knowledge          anything needing
+                   dates, clocks             (Jev, ~300 ms)              the real agent
+                        │                          │                          │
+                   answered locally          answered locally         Aside session, steps
+                   (no network)              (no session)            shown, answer spoken
+</code></pre>
+<p>The first two paths never touch the network for the decision and never start a session, which is why "what is seventeen times twenty three" comes back instantly.</p>
+<h2>Settings</h2>
+<p><code>%APPDATA%\HeyAside\settings.json</code>. The useful ones:</p>
+<table>
+<thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+<tr><td><code>wakeThreshold</code></td><td>0.55</td><td>Wake-model confidence. Raise it if he wakes on TV noise; lower it if he misses you.</td></tr>
+<tr><td><code>followUpSeconds</code></td><td>15</td><td>How long he keeps listening after an answer without needing the wake word again.</td></tr>
+<tr><td><code>hotkey</code></td><td><code>ctrl+alt+j</code></td><td>Push-to-talk.</td></tr>
+<tr><td><code>whisperModel</code></td><td><code>base.en</code></td><td><code>small.en</code> is more accurate and slower.</td></tr>
+<tr><td><code>voice</code></td><td><code>en-GB-RyanNeural</code></td><td>Any Windows or edge voice.</td></tr>
+<tr><td><code>spokenReplies</code></td><td>true</td><td>Speak answers (the text always shows on the island).</td></tr>
+<tr><td><code>muted</code></td><td>false</td><td>Microphone off entirely.</td></tr>
+</table>
+<h2>Keeping it alive</h2>
+<p>A watchdog process supervises Jarvis: if the app crashes or hangs (its heartbeat stops), the watchdog restarts it. The watchdog is started at login, and the local server also audits it every five minutes and restarts the watchdog if that ever dies too.</p>
+<p>To quit for good: right-click the tray icon → <strong>Quit Jarvis</strong>. That stops the app; the watchdog starts it again at the next login. To remove it entirely, run <code>uninstall.ps1</code>.</p>
+<h2>Tests</h2>
+<pre><code>
+cd aside-everywhere\jarvis
+.\.venv\Scripts\python.exe -m pytest tests -q
+</code></pre>
+<p>The suite covers the conversation state machine (including "the island must be hidden unless he is listening or answering"), the false-alarm path, the four-click close, the layout maths, and the local answer engine.</p>
+  </main>
+  <footer>
+    Aside Everywhere is MIT licensed. Mock data on this page. The real documentation lives in the repository.
+  </footer>
+</div>
+</body>
+</html>

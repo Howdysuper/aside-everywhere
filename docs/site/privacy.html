@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy: what goes where · Aside Everywhere</title>
+<meta name="description" content="Privacy: what goes where - part of Aside Everywhere: Aside on your phone, Jarvis on your desktop, and the automation in between." />
+<style>
+  :root {
+    --bg: #fbfbfd; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73;
+    --line: rgba(0,0,0,0.10); --blue: #0b86ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); margin-bottom: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  header nav { display: flex; gap: 18px; flex-wrap: wrap; }
+  header nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+  header nav a.on { color: var(--blue); font-weight: 600; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.025em; line-height: 1.1; margin-bottom: 22px; }
+  h2 { font-size: 23px; letter-spacing: -0.015em; margin: 46px 0 14px; }
+  h3 { font-size: 17px; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  h4 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin-bottom: 16px; color: #2c2c2e; }
+  ul, ol { margin: 0 0 18px 22px; }
+  li { margin-bottom: 7px; color: #2c2c2e; }
+  a { color: var(--blue); }
+  code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; font-size: 0.88em; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 5px; }
+  pre { background: #101014; color: #e8e8ed; padding: 18px 20px; border-radius: 14px; overflow-x: auto; margin-bottom: 20px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+  blockquote { border-left: 3px solid var(--blue); background: var(--card); padding: 14px 18px; border-radius: 0 12px 12px 0; margin-bottom: 18px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  blockquote p { margin: 0; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 0.5px solid var(--line); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 0 60px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="index.html">Aside Everywhere</a>
+    <nav>
+      <a href="index.html">Walkthrough</a>
+      <a href="setup-iphone.html">iPhone</a>
+      <a href="setup-android.html">Android</a>
+      <a href="setup-windows.html">Jarvis</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Howdysuper/aside-everywhere">GitHub</a>
+    </nav>
+  </header>
+  <main>
+<h1>Privacy: what goes where</h1>
+<p>The short version: <strong>this system runs on your computer.</strong> The only outbound connections are to services you explicitly connect, plus the model provider you point Aside at.</p>
+<h2>What never leaves your machine</h2>
+<ul>
+<li>Your <strong>GroupMe token</strong>, Gmail sessions, and Schoology session. They live in a private state directory with file mode 0600 and are never logged.</li>
+<li>Anything classified as <strong>private</strong> by the plain-code filters: one-time codes, account numbers, money amounts, addresses, health, legal, and immigration details. These are counted (so you can see "4 flagged") and then dropped. They are not sent to any model and not written to any feed.</li>
+<li><strong>Audio</strong>. The microphone stream is processed locally by openWakeWord and faster-whisper. Nothing is recorded, saved, or uploaded.</li>
+</ul>
+<h2>What does leave, and to whom</h2>
+<table>
+<thead><tr><th>Destination</th><th>What goes there</th><th>Why</th></tr></thead>
+<tr><td>Your model provider (9router / OpenRouter / Opencode Zen, or whatever you configure)</td><td>Redacted message text and typed yes/no questions</td><td>the actual answering</td></tr>
+<tr><td>Cloudflare</td><td>the request path for the front door</td><td>so your phone can reach your PC</td></tr>
+<tr><td>Apple / Google push services</td><td>title and body of a notification</td><td>delivery to your phone</td></tr>
+<tr><td>Schoology / Gmail / GroupMe</td><td>read-only requests</td><td>the sweeps</td></tr>
+</table>
+<h2>What is stripped before any model sees it</h2>
+<p>The text model never receives raw mail or chat. Before it is called, the pipeline removes: URLs, email addresses, phone numbers, long numbers, and money amounts. The question to Jev is a typed judgment, not the message.</p>
+<p>The one field that is a real address is the <strong>Web Push VAPID subject</strong>, which Apple requires to be a real email (it rejects <code>mailto:aside-local@localhost</code> with a silent 403). Set it with <code>MINIAPP_VAPID_SUBJECT</code>. It is never used to send mail; push services only use it to identify the sender.</p>
+<h2>Your own data, your own rules</h2>
+<ul>
+<li>No telemetry, no analytics, no crash reporting to anyone but you.</li>
+<li>The issue log (<code>issues.jsonl</code>) is local and contains failure descriptions only.</li>
+<li>Kill switch for a lost phone: delete the signing secret (or rotate it). Every token everywhere is invalidated at once and a fresh pairing is required.</li>
+<li>GroupMe and Gmail access are read-only by construction: the code only ever issues GETs.</li>
+</ul>
+<h2>Verifying it yourself</h2>
+<pre><code>
+# everything the server has stored locally, with sizes and ages
+Get-ChildItem "$env:LOCALAPPDATA\HeyAside" -ErrorAction SilentlyContinue
+Get-ChildItem "$HOME\.aside-mobile"
+
+# the complete failure log
+Get-Content "$HOME\.aside-mobile\issues.jsonl"
+</code></pre>
+<p>Grep the source for anything you are unsure about. The privacy filters live in <code>server/src/guards.ts</code> and are unit-tested.</p>
+  </main>
+  <footer>
+    Aside Everywhere is MIT licensed. Mock data on this page. The real documentation lives in the repository.
+  </footer>
+</div>
+</body>
+</html>

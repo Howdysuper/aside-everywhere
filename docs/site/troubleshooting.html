@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Troubleshooting · Aside Everywhere</title>
+<meta name="description" content="Troubleshooting - part of Aside Everywhere: Aside on your phone, Jarvis on your desktop, and the automation in between." />
+<style>
+  :root {
+    --bg: #fbfbfd; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73;
+    --line: rgba(0,0,0,0.10); --blue: #0b86ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); margin-bottom: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  header nav { display: flex; gap: 18px; flex-wrap: wrap; }
+  header nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+  header nav a.on { color: var(--blue); font-weight: 600; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.025em; line-height: 1.1; margin-bottom: 22px; }
+  h2 { font-size: 23px; letter-spacing: -0.015em; margin: 46px 0 14px; }
+  h3 { font-size: 17px; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  h4 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin-bottom: 16px; color: #2c2c2e; }
+  ul, ol { margin: 0 0 18px 22px; }
+  li { margin-bottom: 7px; color: #2c2c2e; }
+  a { color: var(--blue); }
+  code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; font-size: 0.88em; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 5px; }
+  pre { background: #101014; color: #e8e8ed; padding: 18px 20px; border-radius: 14px; overflow-x: auto; margin-bottom: 20px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+  blockquote { border-left: 3px solid var(--blue); background: var(--card); padding: 14px 18px; border-radius: 0 12px 12px 0; margin-bottom: 18px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  blockquote p { margin: 0; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 0.5px solid var(--line); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 0 60px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="index.html">Aside Everywhere</a>
+    <nav>
+      <a href="index.html">Walkthrough</a>
+      <a href="setup-iphone.html">iPhone</a>
+      <a href="setup-android.html">Android</a>
+      <a href="setup-windows.html">Jarvis</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Howdysuper/aside-everywhere">GitHub</a>
+    </nav>
+  </header>
+  <main>
+<h1>Troubleshooting</h1>
+<p>Every failure in this system is written to <code>&lt;stateDir&gt;/issues.jsonl</code> <strong>and</strong> pushed to your phone as "Problem: &lt;what&gt;". Start there: it names the component and the reason.</p>
+<pre><code>
+Get-Content "$HOME\.aside-mobile\issues.jsonl" | Select-Object -Last 10
+</code></pre>
+<p>Then the health check:</p>
+<pre><code>
+cd aside-everywhere\miniapp
+node scripts\doctor.mjs
+</code></pre>
+<h2>The failures that actually happen</h2>
+<h3>Pushes stop arriving</h3>
+<ol>
+<li>Settings → Notifications → <strong>Send test</strong>. If it says "no devices", the phone lost its subscription: open the app once on the phone and re-allow notifications.</li>
+<li>On iPhone: check Focus / Do Not Disturb, and that notifications for the app are allowed in Settings → Notifications.</li>
+<li>On Android: the app and Chrome must be <strong>Unrestricted</strong> in battery settings, and locked in Recents. See the Android guide.</li>
+<li>Quiet hours hold non-urgent pushes between 22:30 and 06:45. They release as one batch, they are not dropped.</li>
+</ol>
+<h3>"Schoology stopped syncing"</h3>
+<p>The browser session expired. Open the app, sign into Schoology once, and the next sweep replays it. The 12:00/15:00/19:00 checks will catch up anything missed while it was expired.</p>
+<p>If it keeps happening, delete the saved session file and re-login.</p>
+<h3>Mail says "N wait for Jev"</h3>
+<p>Jev spent its daily budget. The budget splits per model and per tier, and mail is capped at 85% of the day, so this should be rare. When it happens, emails wait and sort on the next sweep after the budget resets (the upstream day resets at 00:00 UTC).</p>
+<p>To see exactly where it went:</p>
+<pre><code>
+node tools\jev status
+</code></pre>
+<h3>Jarvis does not wake up</h3>
+<ul>
+<li>Is the tray icon there? If not, the app is not running: open Jarvis from the Start menu (the watchdog should start it).</li>
+<li>Wake too rarely: lower <code>wakeThreshold</code> in settings.json (0.55 default, 0.5 is the model's default).</li>
+<li>Waking on TV noise: raise it.</li>
+<li>Read the log — every activation is recorded with its score:</li>
+</ul>
+<pre><code>
+Get-Content "$env:LOCALAPPDATA\HeyAside\Logs\heyaside.log" -Tail 30
+</code></pre>
+<p>A line like <code>wake fired (score 0.61, threshold 0.55)</code> tells you exactly how confident the model was. If the score is always near the threshold, move the threshold past it.</p>
+<h3>Jarvis acts on things nobody said</h3>
+<p>That is the follow-up window hearing background noise. Short utterances (under three words) inside the window are ignored by design; shorten <code>followUpSeconds</code> if it keeps happening.</p>
+<h3>The island will not go away</h3>
+<p>Click it four times quickly. Or right-click the tray icon → <strong>Hide the island</strong>.</p>
+<h3>The app says it cannot reach your computer</h3>
+<p>The tunnel died. The server restarts it automatically (it audits every 20 seconds), so this usually fixes itself in under a minute. If it does not:</p>
+<pre><code>
+# is the server up?
+Invoke-WebRequest http://127.0.0.1:8790/api/health
+
+# is the front door up?
+Invoke-WebRequest https://&lt;your-worker&gt;/api/health
+</code></pre>
+<h3>A Google account is missing from the list</h3>
+<p>Accounts added on the web sometimes do not appear in the enumeration. The code supports a pinned index: set <code>mailAccountIndex</code> (school) or <code>{ "email": ..., "index": N }</code> (personal) in the planner config and it uses that account directly.</p>
+<h2>Reading the logs</h2>
+<table>
+<thead><tr><th>File</th><th>What is in it</th></tr></thead>
+<tr><td><code>&lt;stateDir&gt;/issues.jsonl</code></td><td>every failure, one JSON line each</td></tr>
+<tr><td><code>&lt;stateDir&gt;/next-ledger.jsonl</code></td><td>every sweep, with counts and reasons</td></tr>
+<tr><td><code>%LOCALAPPDATA%\HeyAside\Logs\heyaside.log</code></td><td>Jarvis: boot, every wake with its score, every answer path</td></tr>
+</table>
+<h2>Nuclear option</h2>
+<p>Delete the state directory (<code>.aside-mobile</code>) and restart the server. You will need to re-pair the phone and reconnect the accounts, and every question will be re-asked from scratch. Prefer fixing the one feed that is broken.</p>
+  </main>
+  <footer>
+    Aside Everywhere is MIT licensed. Mock data on this page. The real documentation lives in the repository.
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Architecture · Aside Everywhere</title>
+<meta name="description" content="Architecture - part of Aside Everywhere: Aside on your phone, Jarvis on your desktop, and the automation in between." />
+<style>
+  :root {
+    --bg: #fbfbfd; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73;
+    --line: rgba(0,0,0,0.10); --blue: #0b86ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); margin-bottom: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  header nav { display: flex; gap: 18px; flex-wrap: wrap; }
+  header nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+  header nav a.on { color: var(--blue); font-weight: 600; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.025em; line-height: 1.1; margin-bottom: 22px; }
+  h2 { font-size: 23px; letter-spacing: -0.015em; margin: 46px 0 14px; }
+  h3 { font-size: 17px; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  h4 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin-bottom: 16px; color: #2c2c2e; }
+  ul, ol { margin: 0 0 18px 22px; }
+  li { margin-bottom: 7px; color: #2c2c2e; }
+  a { color: var(--blue); }
+  code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; font-size: 0.88em; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 5px; }
+  pre { background: #101014; color: #e8e8ed; padding: 18px 20px; border-radius: 14px; overflow-x: auto; margin-bottom: 20px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+  blockquote { border-left: 3px solid var(--blue); background: var(--card); padding: 14px 18px; border-radius: 0 12px 12px 0; margin-bottom: 18px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  blockquote p { margin: 0; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 0.5px solid var(--line); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 0 60px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="index.html">Aside Everywhere</a>
+    <nav>
+      <a href="index.html">Walkthrough</a>
+      <a href="setup-iphone.html">iPhone</a>
+      <a href="setup-android.html">Android</a>
+      <a href="setup-windows.html">Jarvis</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Howdysuper/aside-everywhere">GitHub</a>
+    </nav>
+  </header>
+  <main>
+<h1>Architecture</h1>
+<h2>The three processes</h2>
+<table>
+<thead><tr><th>Process</th><th>Language</th><th>Lifetime</th><th>What it owns</th></tr></thead>
+<tr><td><code>miniapp/server</code></td><td>TypeScript (Fastify)</td><td>always on, supervised</td><td>sweeps, planning, push, the Jev door, the phone bridge, the session bridge to Aside</td></tr>
+<tr><td><code>miniapp/web</code> (built)</td><td>React, served by the server</td><td>on your phone</td><td>the PWA: To Do, chat, settings, push subscription</td></tr>
+<tr><td><code>jarvis</code></td><td>Python (PySide6)</td><td>supervised by its watchdog</td><td>wake word, speech, the island, tray</td></tr>
+<tr><td><code>miniapp/frontdoor</code></td><td>Cloudflare Worker</td><td>serverless</td><td>the public URL, the asleep-schedule for reminders</td></tr>
+</table>
+<h2>Data flow: a school email becomes a reminder</h2>
+<ol>
+<li><strong>Sweep</strong> (<code>server/src/inbox.ts</code>, <code>personal.ts</code>) runs on a timer and lists recent mail read-only through Aside's own Gmail tools.</li>
+<li><strong>Plain-code filters</strong> (<code>server/src/guards.ts</code>) drop anything that looks private (one-time codes, money, addresses, health, legal) before any model sees it. Private mail is counted, never stored.</li>
+<li><strong>Jev</strong> reads the rest as a batch of typed yes/no questions: is this worth showing? is it trying to instruct an AI? A "no" costs nothing and never reaches the expensive model.</li>
+<li><strong>Claude</strong> writes one short line for what survived: a title, what it asks, why it matters, a deadline.</li>
+<li><strong>The planner</strong> (<code>server/src/next.ts</code>) merges every feed into one ranked list: missing work, due today, upcoming, notices.</li>
+<li><strong>The push engine</strong> (<code>server/src/nextpush.ts</code>) decides what deserves a notification, and delivers it through Web Push to every paired phone.</li>
+</ol>
+<p>Steps 3 and 4 are the cost split. Jev is a fraction of a cent per batch and answers in milliseconds; Claude only sees mail that already passed a cheap judgment.</p>
+<h2>The Jev door</h2>
+<p><code>server/src/jev.ts</code> is a single choke point every decision goes through, and it enforces:</p>
+<ul>
+<li><strong>Budget</strong> — a daily request cap, split per tier so background work can never starve safety checks, and split <strong>per model</strong> when two models are configured (each upstream account has its own quota, so a rate limit on one is the other's turn).</li>
+<li><strong>Breaker</strong> — a 429 from the provider pauses callers for 30 minutes; three network failures pause for 2. A paused door returns "no answer" and callers fall back to plain code, never to a wrong action.</li>
+<li><strong>Cache</strong> — the same model, questions and state produce the same answer for a week, on disk, so a restart does not spend the budget twice.</li>
+<li><strong>Failover</strong> — two models can be configured; the one with less spend today answers, and a 429 marks that model full for the day so the next call moves to the other.</li>
+<li><strong>Feature caps</strong> — a single feed can never eat the whole day (mail is capped at 85%, leaving a reserve for voice and the Next checks).</li>
+</ul>
+<p><code>tools/jev</code> is the CLI face of the same door, so anything on the machine (<code>jev quick "..."</code>, <code>jev risk "..."</code>) shares one budget and one privacy guard.</p>
+<h2>The push engine</h2>
+<p><code>server/src/nextpush.ts</code> runs every minute and applies rules in plain code:</p>
+<table>
+<thead><tr><th>Rule</th><th>Fires</th></tr></thead>
+<tr><td>NEW</td><td>an unseen actionable item, batched</td></tr>
+<tr><td>DUE SOON</td><td>two hours before a due time (exempt from quiet hours: a 1 PM ping must go out)</td></tr>
+<tr><td>LATE</td><td>0-12 hours past due, once</td></tr>
+<tr><td>THREE-WEEK</td><td>once when an item enters the 21-day window</td></tr>
+<tr><td>MORNING DIGEST</td><td>once a day after 06:45, doubles as the catch-up summary if the PC slept through the morning</td></tr>
+<tr><td>ANNOUNCEMENTS</td><td>new group posts</td></tr>
+<tr><td>DM</td><td>a new GroupMe DM, immediately</td></tr>
+<tr><td>SYNC STALL</td><td>no Schoology refresh for 26 hours</td></tr>
+<tr><td>HELD</td><td>anything held during quiet hours releases as one batch when quiet ends</td></tr>
+</table>
+<p>Quiet hours hold non-urgent pushes overnight and during school; nothing is ever dropped. A 15-per-day cap keeps a bad feed from turning into a spam machine.</p>
+<h2>Jarvis</h2>
+<p><code>jarvis/heyaside/</code> is deliberately small and dependency-light:</p>
+<ul>
+<li><code>audio.py</code> — microphone, the wake word (openWakeWord, on the CPU), and the end-of-speech detector with an adaptive noise floor</li>
+<li><code>island.py</code> — the capsule: springs, glow, the loading ring, and the streaming text. Layout maths is pure and unit-tested without a screen.</li>
+<li><code>quick.py</code> — local answers: arithmetic including word numbers and speech-split pairs, unit conversion, dates, world clocks. No network, no model.</li>
+<li><code>tts.py</code> — the voice, with per-character progress so the island reveals exactly the words being spoken</li>
+<li><code>watchdog.py</code> — the supervisor</li>
+<li><code>app.py</code> — the conversation state machine</li>
+</ul>
+<h2>Why it never goes silently dead</h2>
+<p>Three layers, because the failure that matters is not a crash, it is a crash nobody notices:</p>
+<ol>
+<li>The app writes a heartbeat every second.</li>
+<li>The watchdog restarts it if the heartbeat goes stale or the process disappears.</li>
+<li>The local server audits the watchdog's own heartbeat every five minutes and restarts the watchdog if that dies.</li>
+</ol>
+<p>Every failure anywhere in the system is written to <code>&lt;stateDir&gt;/issues.jsonl</code> <strong>and</strong> pushed to the phone as "Problem: &lt;what&gt;", deduped so a flapping failure pushes every few hours rather than every minute.</p>
+  </main>
+  <footer>
+    Aside Everywhere is MIT licensed. Mock data on this page. The real documentation lives in the repository.
+  </footer>
+</div>
+</body>
+</html>

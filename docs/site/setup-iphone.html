@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>iPhone setup · Aside Everywhere</title>
+<meta name="description" content="iPhone setup - part of Aside Everywhere: Aside on your phone, Jarvis on your desktop, and the automation in between." />
+<style>
+  :root {
+    --bg: #fbfbfd; --card: #ffffff; --ink: #1d1d1f; --ink-2: #6e6e73;
+    --line: rgba(0,0,0,0.10); --blue: #0b86ff;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 26px 0; border-bottom: 1px solid var(--line); margin-bottom: 44px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  header a.home { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  header nav { display: flex; gap: 18px; flex-wrap: wrap; }
+  header nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  header nav a:hover { color: var(--blue); }
+  header nav a.on { color: var(--blue); font-weight: 600; }
+  h1 { font-size: clamp(30px, 4.4vw, 44px); letter-spacing: -0.025em; line-height: 1.1; margin-bottom: 22px; }
+  h2 { font-size: 23px; letter-spacing: -0.015em; margin: 46px 0 14px; }
+  h3 { font-size: 17px; letter-spacing: -0.01em; margin: 32px 0 10px; }
+  h4 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin-bottom: 16px; color: #2c2c2e; }
+  ul, ol { margin: 0 0 18px 22px; }
+  li { margin-bottom: 7px; color: #2c2c2e; }
+  a { color: var(--blue); }
+  code { font-family: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace; font-size: 0.88em; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 5px; }
+  pre { background: #101014; color: #e8e8ed; padding: 18px 20px; border-radius: 14px; overflow-x: auto; margin-bottom: 20px; }
+  pre code { background: none; padding: 0; color: inherit; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+  blockquote { border-left: 3px solid var(--blue); background: var(--card); padding: 14px 18px; border-radius: 0 12px 12px 0; margin-bottom: 18px; box-shadow: inset 0 0 0 0.5px var(--line); }
+  blockquote p { margin: 0; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 26px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; vertical-align: top; }
+  thead th { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+  tbody tr + tr td { border-top: 0.5px solid var(--line); }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  footer { border-top: 1px solid var(--line); margin-top: 60px; padding: 26px 0 60px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="index.html">Aside Everywhere</a>
+    <nav>
+      <a href="index.html">Walkthrough</a>
+      <a href="setup-iphone.html">iPhone</a>
+      <a href="setup-android.html">Android</a>
+      <a href="setup-windows.html">Jarvis</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="https://github.com/Howdysuper/aside-everywhere">GitHub</a>
+    </nav>
+  </header>
+  <main>
+<h1>iPhone setup</h1>
+<p>Twenty minutes, once. After this the app opens from your home screen like any other app and pushes reminders to you.</p>
+<h2>Before you start</h2>
+<ul>
+<li>A Windows PC on the same network as your phone (for the first pairing only)</li>
+<li>The Aside app installed on the PC, with the CLI installed from <strong>Settings → Developer</strong></li>
+<li>Node 20+ on the PC</li>
+<li>A Cloudflare account (free) for the front door, so your phone can reach the PC from anywhere</li>
+</ul>
+<h2>1. Run the server on your PC</h2>
+<pre><code>
+cd aside-everywhere\miniapp\server
+npm install
+node ..\..\node_modules\typescript\bin\tsc -p tsconfig.json
+copy .\src\cloudflared-release.json .\dist\
+npm start        # or: node dist\index.js
+</code></pre>
+<p>The server listens on <code>http://127.0.0.1:8790</code>.</p>
+<h2>2. Deploy the front door (one time)</h2>
+<pre><code>
+cd aside-everywhere\miniapp\frontdoor
+npx wrangler login
+npx wrangler deploy
+</code></pre>
+<p>Write the worker URL it prints into the server config (<code>.aside-mobile\front-door\frontdoor.json</code> is created for you; the key is <code>front</code>). Restart the server.</p>
+<h2>3. Build the phone app</h2>
+<pre><code>
+cd aside-everywhere\miniapp\web
+npm install
+node ..\..\node_modules\typescript\bin\tsc --noEmit
+node ..\..\node_modules\vite\bin\vite.js build
+</code></pre>
+<p>The server serves the built app itself, so there is nothing to upload anywhere.</p>
+<h2>4. Pair the phone</h2>
+<ol>
+<li>On the PC, open <code>http://127.0.0.1:8790/pair</code> and copy the link it shows (it contains a one-time code).</li>
+<li>Send that link to your phone (AirDrop, Messages, whatever) and open it in Safari.</li>
+<li>The page asks to add the app to your home screen: tap Share → <strong>Add to Home Screen</strong>.</li>
+<li>Open the app from the home screen. It pairs itself and asks to enable notifications. Say <strong>Allow</strong>.</li>
+</ol>
+<p>Pairing lasts years by default; the phone silently refreshes its token in the background every time you open the app.</p>
+<h2>5. Connect your accounts</h2>
+<p>In the app: <strong>Settings → Connections</strong>. You will need, in this order:</p>
+<ul>
+<li><strong>Google</strong> (for Gmail and Calendar) — sign in once per mailbox</li>
+<li><strong>Schoology</strong> — sign in through the browser once; the login is replayed automatically afterwards</li>
+<li><strong>GroupMe</strong> — paste a personal access token (see below)</li>
+</ul>
+<h2>6. The GroupMe token</h2>
+<p>GroupMe's API needs a personal token. The shortest path:</p>
+<ol>
+<li>Sign in at https://dev.groupme.com</li>
+<li>Open the <strong>Access token</strong> page (top right)</li>
+<li>Copy the token and paste it into the app's GroupMe settings</li>
+</ol>
+<p>The token is stored in a private file on your PC (mode 0600) and never leaves it.</p>
+<h2>7. Check it is alive</h2>
+<ul>
+<li>Open the app: the top of the To Do list shows when each feed last refreshed</li>
+<li>Send yourself a test push: <strong>Settings → Notifications → Send test</strong></li>
+<li>Run <code>node scripts\doctor.mjs</code> from <code>miniapp\</code> for a full health report</li>
+</ul>
+<hr />
+<h2>The prompt for your AI assistant</h2>
+<p>Prefer to have an assistant do it? Paste this into ChatGPT, Claude, or any coding agent and give it this repository. It is written to be self-contained.</p>
+<pre><code>
+You are setting up "Aside Everywhere" on my Windows PC and my iPhone. Work
+through it in order and verify each step before moving on. Ask me for anything
+you cannot discover yourself.
+
+Context you will need from me as we go:
+- the path where I cloned this repository
+- a Cloudflare account I control (I will run `npx wrangler login` when you ask)
+
+Steps:
+
+1. PREREQUISITES. Verify Node 20+ and the Aside CLI exist on this PC. If the
+   Aside CLI is missing, tell me to install it from the Aside app under
+   Settings &gt; Developer and wait.
+
+2. SERVER. From the repo root:
+   - cd miniapp/server
+   - install dependencies
+   - compile TypeScript
+   - copy src/cloudflared-release.json into dist/
+   - start the server and confirm http://127.0.0.1:8790/api/health answers
+     {"ok":true}
+   If the server dies when your shell exits, tell me to start it from my own
+   PowerShell; a supervisor on the PC is expected to keep it alive, so tell me
+   how to check that too.
+
+3. FRONT DOOR. Deploy miniapp/frontdoor as a Cloudflare Worker (I will run
+   `npx wrangler login`). Then put the worker's URL into the server's front-door
+   config and restart the server. Verify https://&lt;worker&gt;/api/health answers
+   {"ok":true}. Never print any secret values; just confirm they exist.
+
+4. PHONE APP. Build miniapp/web (typecheck + vite build). Then open
+   http://127.0.0.1:8790/pair on the PC and give me the full link it shows.
+   I will open it on my iPhone in Safari, add it to my home screen, and open it.
+   Confirm the app reports itself as paired, then have me allow notifications
+   and send a test push that arrives.
+
+5. CONNECTIONS. Walk me through connecting, one at a time, and verify each by
+   running a refresh and checking the feed timestamps update:
+   - Google: sign in for my school mailbox and my personal mailbox. If the
+     account list does not show an account I added on the web, use the pinned
+     /u/N/ index fallback the code already supports rather than failing.
+   - Schoology: sign in through the browser once, then verify the scheduled
+     sweep writes item-notes.json. Do not store or type my password; the
+     existing replay logic handles the session. If it asks me to re-login, say so.
+   - GroupMe: give me the dev.groupme.com Access token page, take the token I
+     paste, save it to the private state file, and verify the group sweep and
+     the DM watcher both run.
+
+6. SCHEDULES. Confirm and report: Gmail and GroupMe sweeps every 30 minutes,
+   the GroupMe DM watcher every 5 minutes, Schoology at 06:30, 12:00, 15:00 and
+   19:00 with an automatic catch-up if the PC was asleep for a slot. Verify by
+   reading the activity log, not by trusting any single message.
+
+7. PUSH RULES. Verify that: new items push "New on your list"; something due
+   within two hours pushes "Due soon"; a late item pushes "Now late"; a GroupMe
+   DM pushes "Respond to &lt;name&gt; on GroupMe" immediately; any failure in the whole
+   system writes to the issue log AND pushes a "Problem: &lt;what&gt;" notification.
+   Show me the issue log path.
+
+8. JARVIS (optional). If I say yes, set up jarvis/ per its install script, then
+   verify: the tray icon appears, saying "Hey Jarvis" starts a conversation, a
+   math question answers locally without any network call, and the island hides
+   itself after the answer. Report the wake threshold and how to change it.
+
+Throughout: never print API keys, tokens, or my personal data. If a step fails
+twice, stop and tell me exactly what you saw, what you tried, and what you need
+from me.
+</code></pre>
+<hr />
+<h2>If something breaks</h2>
+<p>See <a href="troubleshooting.md">troubleshooting.md</a>. The two that matter most:</p>
+<ul>
+<li><strong>"Schoology stopped syncing"</strong> — the session expired. Open the app once, sign into Schoology, and the next sweep replays it.</li>
+<li><strong>No pushes at all</strong> — check Settings → Notifications, then run <code>node scripts\doctor.mjs</code>.</li>
+</ul>
+  </main>
+  <footer>
+    Aside Everywhere is MIT licensed. Mock data on this page. The real documentation lives in the repository.
+  </footer>
+</div>
+</body>
+</html>

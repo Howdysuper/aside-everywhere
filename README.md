@@ -1,3 +1,5 @@
+[![CI](https://github.com/Howdysuper/aside-everywhere/actions/workflows/ci.yml/badge.svg)](https://github.com/Howdysuper/aside-everywhere/actions/workflows/ci.yml) [![Demo site](https://github.com/Howdysuper/aside-everywhere/actions/workflows/pages.yml/badge.svg)](https://howdysuper.github.io/aside-everywhere/)
+
 # Aside Everywhere
 
 **Turn Aside into a full personal assistant: on your phone, on your desktop, and running in the background.**

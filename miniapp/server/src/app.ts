@@ -4331,7 +4331,7 @@ export async function buildServer(
             const ep = gateModel ? routerEndpoint(nextRoot, gateModel) : null;
             return ep ? jevGroupMe(ep, jev.fetchFor('safety', 'groupme.dm')) : async () => null;
           })(),
-          config: { excludeGroups: gmConfig.excludeGroups },
+          config: gmConfig,
           token: gmToken,
           onNewDm: (m) => {
             const why = privateKindOf(m.text);
@@ -5763,3 +5763,4 @@ export async function buildServer(
 
   return { app, runner, watchers, subagents };
 }
+

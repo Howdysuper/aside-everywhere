@@ -700,7 +700,7 @@ export interface DmOptions {
   cachePath: string;
   complete: Completer;
   decide: (state: string) => Promise<GroupMeGate | null>;
-  config: Pick<GroupMeConfig, 'excludeGroups'>;
+  config: GroupMeConfig;
   token: string;
   /** Fired with each new DM as it is found, for the instant push. */
   onNewDm?: (m: DmMessage) => void;
@@ -1031,3 +1031,4 @@ export function privateKindOf(text: string): string | null {
   if (/\b(prescription|diagnos|allergy|therapy|clinic|hospital)\b/i.test(text)) return 'health';
   return null;
 }
+

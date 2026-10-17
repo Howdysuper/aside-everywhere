@@ -35,8 +35,8 @@ function msg(id: string, text: string, at: number = Math.floor(now.getTime() / 1
 }
 
 function gmFetch(groups: unknown, pages: Record<string, unknown[][]>): typeof fetch {
-  return (async (input: RequestInfo | URL) => {
-    const url = String(typeof input === 'string' ? input : input.url ?? input);
+  return (async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(typeof input === 'string' ? input : (input as URL).href);
     if (url.includes('/groups?') || url.endsWith('/groups')) {
       return new Response(JSON.stringify(groups), { status: 200 });
     }
@@ -44,7 +44,8 @@ function gmFetch(groups: unknown, pages: Record<string, unknown[][]>): typeof fe
     if (m) {
       const list = pages[m[1]]?.[0] ?? [];
       const before = /before_id=([^&]+)/.exec(url)?.[1];
-      const page = before ? list.slice(list.findIndex((x) => String(x.id) === decodeURIComponent(before)) + 1) : list;
+      const rows = list as Array<Record<string, unknown>>;
+      const page = before ? rows.slice(rows.findIndex((x) => String(x.id) === decodeURIComponent(before)) + 1) : list;
       return new Response(JSON.stringify({ response: { count: 100, messages: page } }), { status: 200 });
     }
     return new Response('{}', { status: 404 });
@@ -126,12 +127,8 @@ describe('fetch', () => {
   });
 
   it('drops future and system events from noise filtering', () => {
-    const future = msg('f', 'tomorrow stuff', Math.floor(now.getTime() / 1000) + 3600);
-    expect(noiseReason(
-      { id: 'f', groupId: '1', groupName: 'g', name: 'x', text: 'hi there', at: future.at, system: false, attachments: [] },
-      now,
-      365,
-    )).toBe(null);
+    const at = Math.floor(now.getTime() / 1000) + 3600;
+    expect(noiseReason({ id: 'f', groupId: '1', groupName: 'g', name: 'x', text: 'hi there', at, system: false, attachments: [] }, now, 365)).toBe(null);
     expect(noiseReason(
       { id: 's', groupId: '1', groupName: 'g', name: '', text: 'added Bob', at: 1_790_000_000, system: true, attachments: [] },
       now,
@@ -157,11 +154,7 @@ describe('classification', () => {
   });
 
   it('keeps no numbers or links in the model view', () => {
-    const out = messagesForModel([{
-      id: 'm', groupId: '1', groupName: 'g', name: 'Sam',
-      text: 'Call me at 629-555-0134 or see https://example.com/secret for the code 913377',
-      at: 1, system: false, attachments: [],
-    }]);
+    const out = messagesForModel([{ name: 'Sam', text: 'Call me at 629-555-0134 or see https://example.com/secret for the code 913377' }]);
     expect(out).toContain('M1 [Sam]');
     expect(out).not.toContain('629');
     expect(out).not.toContain('https');
@@ -287,8 +280,8 @@ describe('direct messages', () => {
   });
 
   function dmFetch(me: Record<string, unknown> | null, chats: unknown): typeof fetch {
-    return (async (input: RequestInfo | URL) => {
-      const url = String(typeof input === 'string' ? input : input.url ?? input);
+    return (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(typeof input === 'string' ? input : (input as URL).href);
       if (url.includes('/users/me')) return new Response(JSON.stringify(me ? { response: me } : {}), { status: me ? 200 : 401 });
       if (url.includes('/chats?')) return new Response(JSON.stringify(chats), { status: 200 });
       return new Response('{}', { status: 404 });
@@ -354,7 +347,7 @@ describe('direct messages', () => {
         cachePath: path.join(d, 'dm-cache.json'),
         complete,
         decide: async () => ({ show: 0.9, aiBait: 0.01, phish: 0.01, sensitive: 0.01 }),
-        config: { enabled: true, excludeGroups: [], maxMessages: 60, maxAgeDays: 7 },
+        config: { enabled: true, excludeGroups: [] as string[], maxMessages: 60, maxAgeDays: 7 },
         token: 'a'.repeat(32),
         onNewDm: (m) => pushed.push(`respond:${m.otherName}`),
         fetchImpl: dmFetch({ id: '1' }, chats),
@@ -392,7 +385,7 @@ describe('direct messages', () => {
         cachePath: path.join(d, 'dm-cache.json'),
         complete: async () => { throw new Error('the classifier must never see a private DM'); },
         decide: async () => ({ show: 0.9, aiBait: 0.01, phish: 0.01, sensitive: 0.01 }),
-        config: { enabled: true, excludeGroups: [], maxMessages: 60, maxAgeDays: 7 },
+        config: { enabled: true, excludeGroups: [] as string[], maxMessages: 60, maxAgeDays: 7 },
         token: 'a'.repeat(32),
         onNewDm: (m) => pushed.push(`respond:${m.otherName}`),
         fetchImpl: dmFetch({ id: '1' }, chats),
@@ -417,7 +410,7 @@ describe('jev door', () => {
     let body = '';
     const decide = jevGroupMe(
       { baseUrl: 'http://127.0.0.1:20128', apiKey: 'k', model: 'jev' },
-      (async (_u: RequestInfo | URL, init?: RequestInit) => {
+      (async (_u: Parameters<typeof fetch>[0], init?: RequestInit) => {
         body = String(init?.body ?? '');
         return new Response(JSON.stringify({ answers: { show: { noul: 0.8 }, ai_bait: { noul: 0.1 }, phish: { noul: 0.05 }, sensitive: { noul: 0.2 } } }), { status: 200 });
       }) as typeof fetch,
@@ -436,6 +429,9 @@ describe('jev door', () => {
     expect(await decide('x')).toBeNull();
   });
 });
+
+
+
 
 
 

@@ -141,6 +141,8 @@ jobs:
       - name: Download the speech models
         run: python -c "from heyaside import audio, config; audio.ensure_wake_models(); print('models ready')"
       - name: Test
-        run: pytest tests -q
+        # `python -m pytest` (not the pytest binary) so the working directory is
+        # on sys.path and the tests can import the heyaside package.
+        run: python -m pytest tests -q
         env:
           QT_QPA_PLATFORM: offscreen

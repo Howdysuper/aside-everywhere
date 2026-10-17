@@ -5,7 +5,7 @@ RUN = (
     f"{E}[2mcreated new session: ses_ABC123{E}[0m\n"
     f"{E}[2mThinking: let me look{E}[0m\n"
     f"{E}[32mrepl{E}[0m(code: {E}[32m'await openTab(1)'{E}[39m, title: {E}[32m'Opening the calendar'{E}[39m){E}[2m [call_1]{E}[0m\n"
-    f"{E}[32mread_file{E}[0m(path: {E}[32m'C:\\Users\\alex\\.aside\\u\\0\\skills\\user\\daily-planner\\SKILL.md'{E}[39m){E}[2m [call_2]{E}[0m\n"
+    f"{E}[32mread_file{E}[0m(path: {E}[32m'D:\\Projects\\notes\\daily-planner\\SKILL.md'{E}[39m){E}[2m [call_2]{E}[0m\n"
     "You have two meetings tomorrow, sir: standup at 9 and design review at 2.\n"
 )
 

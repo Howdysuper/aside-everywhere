@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { runPush } from 'file:///C:/Users/shaur/aside-phone/miniapp/server/dist/nextpush.js';
+import { runPush } from new URL('../dist/nextpush.js', import.meta.url).href;
 
 let pass = 0;
 let fail = 0;

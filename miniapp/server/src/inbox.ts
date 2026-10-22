@@ -791,6 +791,69 @@ export async function runFixed(repl: ReplRunner, build: (marker: string) => stri
   return decodeReplOutput(await repl(build(marker)), marker);
 }
 
+/**
+ * runFixed, but calls `onUnreadable` with the raw stdout when the marker is
+ * missing, duplicated or unparseable. That reply is the only evidence for
+ * "no readable result", so it has to be kept rather than discarded.
+ */
+export async function runFixedDebug(
+  repl: ReplRunner,
+  build: (marker: string) => string,
+  onUnreadable: (stdout: string) => void = () => {},
+): Promise<unknown> {
+  const marker = newMarker();
+  const stdout = await repl(build(marker));
+  const parsed = decodeReplOutput(stdout, marker);
+  if (parsed === null || parsed === undefined) onUnreadable(String(stdout).slice(0, 600));
+  return parsed;
+}
+
+/**
+ * A browser profile dropping off the daemon for a moment, or a socket hiccup
+ * between CLI sessions, looks like a hard failure to execFile. Retrying
+ * inline costs seconds and saves the sweep's whole 20-30 minute retry delay,
+ * so a pass only gives up after these attempts.
+ */
+const TRANSIENT_RE =
+  /not connected to the daemon|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|EHOSTUNREACH|socket hang up|target page, context or browser has been closed|Execution context was destroyed|timed out|Timeout|No \/sync\/ request|aside-daemon/i;
+
+/** Short, human reason for a failed pass: this text is pushed to the phone. */
+export function replFailureReason(e: unknown): string {
+  const s = String(e instanceof Error ? e.message : e);
+  if (/not connected to the daemon/i.test(s)) return 'Aside Browser was not reachable';
+  if (/No \/sync\/ request|aside-daemon/i.test(s)) return 'Gmail did not answer in time';
+  if (/timed out|ETIMEDOUT|Timeout/i.test(s)) return 'the check took too long and timed out';
+  if (/no_account/i.test(s)) return 'no matching mail account';
+  if (/ENOENT|spawn|cannot find/i.test(s)) return 'the CLI could not start';
+  if (/429|Too Many/i.test(s)) return 'the CLI asked us to slow down';
+  const tail = s.split('\n').filter(Boolean).pop()?.trim() ?? '';
+  return tail ? `CLI said: ${tail.slice(0, 110)}` : 'the check did not run';
+}
+
+/** See TRANSIENT_RE: retries only what is worth retrying, then rethrows. */
+export async function runFixedRetry(
+  repl: ReplRunner,
+  build: (marker: string) => string,
+  attempts = 3,
+  log: (msg: string, extra?: unknown) => void = () => {},
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  onUnreadable: (raw: string) => void = () => {},
+): Promise<unknown> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await runFixedDebug(repl, build, onUnreadable);
+    } catch (e) {
+      lastErr = e;
+      if (i === attempts - 1 || !TRANSIENT_RE.test(String(e))) throw e;
+      const waitMs = 15_000 * (i + 1);
+      log(`retrying after a transient CLI failure (${replFailureReason(e)}); attempt ${i + 2} in ${waitMs / 1000}s`);
+      await sleep(waitMs);
+    }
+  }
+  throw lastErr;
+}
+
 export function defaultCliPath(): string {
   if (process.platform === 'darwin') return path.join(os.homedir(), '.aside', 'cli', 'Aside CLI.app', 'Contents', 'MacOS', 'aside');
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
@@ -800,11 +863,31 @@ export function defaultCliPath(): string {
   return 'aside';
 }
 
+const MARKER_RE = /@@NEXTMAIL-[0-9a-f]{16}@@/;
+
+/**
+ * Does this CLI reply carry a failure rather than a result? Every script this
+ * code runs ends by printing the marker, so a reply without exactly one
+ * produced nothing to decode. That is the whole test, and it covers all three
+ * ways the CLI fails: exit non-zero, exit 0 while printing its own error text,
+ * or print nothing at all.
+ */
+export function replFailure(err: unknown, stdout: unknown): Error | null {
+  const out = String(stdout ?? '');
+  // Exactly one, the same rule decodeReplOutput uses: a second copy means
+  // something else echoed the marker, so there is no trustworthy result.
+  if ((out.match(new RegExp(MARKER_RE.source, 'g')) ?? []).length === 1) return null;
+  if (err instanceof Error) return err;
+  const why = out.split('\n').find((l) => /Error|not connected|No \/sync\/|denied|refused/i.test(l))?.trim();
+  return new Error(why || (out.trim() ? out.slice(0, 240).trim() : 'the CLI returned no output'));
+}
+
 export function cliRepl(cliPath = defaultCliPath()): ReplRunner {
   return (code) =>
     new Promise((resolve, reject) => {
       execFile(cliPath, ['repl', code], { timeout: 115_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
-        if (err && !stdout) reject(err);
+        const bad = replFailure(err, stdout);
+        if (bad) reject(bad);
         else resolve(String(stdout));
       });
     });
@@ -1105,12 +1188,25 @@ export class InboxSweeper {
     };
     let list: { uid?: number; threads?: Array<{ id: string; at: string }>; partial?: boolean; error?: string } | null;
     try {
-      list = (await runFixed(this.o.repl, (mk) => listScript(this.o.account, this.o.query ?? 'in:inbox newer_than:14d', mk, this.o.index))) as typeof list;
+      list = (await runFixedRetry(this.o.repl, (mk) => listScript(this.o.account, this.o.query ?? 'in:inbox newer_than:14d', mk, this.o.index), 3, log, undefined, (raw) => log('inbox list raw reply', { raw }))) as typeof list;
     } catch (e) {
       log('inbox list failed', String(e));
-      return fail('fetch_failed');
+      return fail(replFailureReason(e));
     }
-    if (!list || list.error || !Array.isArray(list.threads)) return fail(list?.error ?? 'fetch_failed');
+    if (!list || list.error || !Array.isArray(list.threads)) {
+      // decodeReplOutput gives null when the CLI printed something else, or
+      // nothing. Without this branch the only evidence left is the word
+      // "fetch_failed", which is not a reason anybody can act on.
+      const why = !list
+        ? 'the CLI returned no readable result'
+        : list.error === 'no_account'
+          ? 'no matching mail account'
+          : list.error
+            ? replFailureReason(list.error)
+            : 'the CLI returned an unexpected reply';
+      log('inbox list unusable', { why, error: list?.error });
+      return fail(why);
+    }
 
     const cache = this.readCache();
     const seen = new Set<string>();
@@ -1130,7 +1226,7 @@ export class InboxSweeper {
       for (let i = 0; i < stale.length; i += 20) {
         let got = null as { threads?: Array<MailThread & { error?: string }> } | null;
         try {
-          got = (await runFixed(this.o.repl, (mk) => threadsScript(this.o.account, stale.slice(i, i + 20), mk, true, this.o.index))) as typeof got;
+          got = (await runFixedRetry(this.o.repl, (mk) => threadsScript(this.o.account, stale.slice(i, i + 20), mk, true, this.o.index), 3, log)) as typeof got;
         } catch (e) {
           log('inbox threads failed', String(e));
         }
@@ -1374,7 +1470,7 @@ export class ReplyDrafter {
   ) {}
 
   async fetchThread(threadId: string): Promise<MailThread | null> {
-    const got = (await runFixed(this.o.repl, (mk) => threadsScript(this.o.account, [threadId], mk, false, this.o.index))) as {
+    const got = (await runFixedRetry(this.o.repl, (mk) => threadsScript(this.o.account, [threadId], mk, false, this.o.index))) as {
       threads?: Array<MailThread & { error?: string }>;
     } | null;
     const t = got?.threads?.[0];

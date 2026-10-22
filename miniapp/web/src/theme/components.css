@@ -11492,3 +11492,144 @@
   font-size: 13px;
   opacity: 0.65;
 }
+
+/*
+ * "N changes waiting for your computer."
+ *
+ * Sits just under the relay banner and only exists when the outbox is not
+ * empty, so a working app shows nothing. The list it opens is the whole
+ * point: a count nobody can expand is another number to trust, and the
+ * names are what makes it checkable.
+ */
+.pending-sync {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: min(92vw, 26rem);
+}
+
+.pending-sync-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 22%);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pending-sync-bar:active {
+  transform: scale(0.99);
+}
+
+.pending-sync-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning, #e0a63c);
+}
+
+.pending-sync-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pending-sync-count {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 22%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.pending-sync-list {
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 26%);
+}
+
+.pending-sync-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pending-sync-row + .pending-sync-row {
+  border-top: 1px solid var(--border, rgb(128 128 128 / 22%));
+}
+
+.pending-sync-kind {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--muted, rgb(128 128 128 / 16%));
+  color: var(--muted-foreground, inherit);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pending-sync-what {
+  flex: 1;
+  min-width: 0;
+}
+
+.pending-sync-send {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pending-sync-send:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pending-sync-note {
+  margin: 8px 0 0;
+  color: var(--muted-foreground, inherit);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pending-sync-bar:active {
+    transform: none;
+  }
+}

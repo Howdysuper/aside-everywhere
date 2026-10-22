@@ -37,7 +37,7 @@ const AWAKE_STANDDOWN_MS = 4 * 60_000;
 // Same threshold as the server's sync-stall rule: no Schoology refresh for
 // 26h means the computer is off or Schoology needs a re-login.
 const STALL_AFTER_MS = 26 * 3600_000;
-// Your own address, set before you deploy: Apple's web push rejects a\n// placeholder subject like mailto:aside-local@localhost with a silent 403.\nconst VAPID_SUBJECT = 'mailto:you@example.com';
+const VAPID_SUBJECT = 'mailto:shaurya.nadagoudra@gmail.com';
 
 let memo = null;
 let memoAt = 0;
@@ -363,4 +363,3 @@ async function handle(request, env, url) {
     return response;
   }
 }
-

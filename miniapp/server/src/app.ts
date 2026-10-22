@@ -150,6 +150,8 @@ import { backgroundModel, readOnlyRepl } from './guards.js';
 import { PersonalSweeper, countsLine, jevPersonal, type PersonalCounts } from './personal.js';
 import { GroupMeSweeper, jevGroupMe, readGroupMeConfig, readToken as readGroupMeToken, DmSweeper, DM_INTERVAL_MS, privateKindOf, type DmResult, type GroupMeResult } from './groupme.js';
 import { Issues } from './issues.js';
+import { buildCheckReport, checkReportHours } from './checkreport.js';
+import { SCHOOLOGY_STALE_MS, shouldNagStale, staleMessage } from './schoologystall.js';
 import { WorkTrailReader } from './worktrail.js';
 import { agentPromptFor, researchPlanFor, researchPromptFor } from './brief.js';
 import { ResearchStore, questionPrompt, readResearch, type ResearchBrief } from './research.js';
@@ -3841,12 +3843,12 @@ export async function buildServer(
       })
     : null;
   const drafter = mailConfig ? new ReplyDrafter({ account: mailConfig.account, index: mailConfig.index, repl: mailRepl, complete: mailComplete }) : null;
-  const recordSweep = (r: { ok: boolean; items?: number; flagged?: number; pending?: number; sorted?: number }, why: 'schedule' | 'you') => {
+  const recordSweep = (r: { ok: boolean; error?: string; items?: number; flagged?: number; pending?: number; sorted?: number }, why: 'schedule' | 'you') => {
     const flagged = r.flagged ?? 0;
     const gate = (r as { gate?: { checked: number; dropped: number } }).gate;
     record('sorter', 'mail.sweep', r.ok
       ? `Sorted school email: ${r.items ?? 0} item${r.items === 1 ? '' : 's'} on your list${flagged ? `, ${flagged} flagged as suspicious` : ''}${gate?.dropped ? `. Jev skipped ${gate.dropped} with nothing for you` : ''}.`
-      : 'School email sort did not finish; it will retry in 20 minutes.', {
+      : `School email sort did not finish: ${r.error ?? 'unknown reason'}. It will retry in 20 minutes.`, {
       detail: { items: r.items ?? 0, flagged, pending: r.pending ?? 0, trigger: why, tools: 'none' },
       risk: flagged ? 'low' : 'none',
     });
@@ -4129,17 +4131,25 @@ export async function buildServer(
   });
 
   if (inbox && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    /* How often a healthy school-mail pass may run. The sweepDue default is
+       three hours, which quietly made school mail the slowest feed on the
+       machine while the comment and the tick both said thirty minutes; the
+       caller now states the cadence out loud. */
+    const SCHOOL_SWEEP_EVERY = 90 * 60_000;
     const tick = () => {
       if (control.read().paused) return;
       // A failed or partial sweep (throttled model, flaky Gmail helper)
-      // tries again in 20 minutes instead of waiting out three hours.
+      // tries again in 20 minutes instead of waiting out ninety.
       const failed = inbox.lastRun && (!inbox.lastRun.result.ok || (inbox.lastRun.result.pending ?? 0) > 0);
-      if (failed ? sweepDue(new Date(), inbox.lastRun!.at, RETRY_MS) : sweepDue(new Date(), lastSweepAt())) {
+      if (failed ? sweepDue(new Date(), inbox.lastRun!.at, RETRY_MS) : sweepDue(new Date(), lastSweepAt(), SCHOOL_SWEEP_EVERY)) {
         void inbox
           .sweep()
           .then((r) => {
             app.log.info({ r }, 'school mail sweep');
             recordSweep(r, 'schedule');
+            // A failed pass has to say so: silence reads as "nothing to do"
+            // when the check never actually ran.
+            if (!r.ok) issues.note('School mail', `The school Gmail check did not run: ${r.error ?? 'unknown reason'}. It retries in 20 minutes.`);
             runNextJev();
           })
           .catch((err) => {
@@ -4148,9 +4158,13 @@ export async function buildServer(
           });
       }
     };
-    const first = setTimeout(tick, 45_000);
-    // Every 30 minutes, like the other feeds: a fresh pass each half hour,
-    // and a retry pass inside it when the last one failed (RETRY_MS above).
+    // The first pass waits longer than the personal sweep's 90 s: the CLI
+    // repl needs its session established, and firing at 45 s right after a
+    // restart raced it and logged a fetch_failed that retried 20 min later.
+    const first = setTimeout(tick, 150_000);
+    // Checks every 30 minutes, like the other feeds: the pass itself is
+    // rate-limited to SCHOOL_SWEEP_EVERY, so this is the resolution it can
+    // fire at, not the cadence, and a failed pass retries via RETRY_MS.
     const every = setInterval(tick, 30 * 60_000);
     first.unref();
     every.unref();
@@ -4195,6 +4209,11 @@ export async function buildServer(
     }
     return {
       ok: rs.length > 0 && rs.every((r) => r.ok),
+      // Which account failed and why, so the push can say more than "failed".
+      ...(() => {
+        const bad = rs.filter((r) => !r.ok);
+        return bad.length ? { error: bad.map((r) => r.error || 'unknown reason').join('; ') } : {};
+      })(),
       threads: rs.reduce((a, r) => a + (r.threads ?? 0), 0),
       sorted: rs.reduce((a, r) => a + (r.sorted ?? 0), 0),
       items: rs.reduce((a, r) => a + (r.items ?? 0), 0),
@@ -4210,7 +4229,7 @@ export async function buildServer(
     const priv = Object.values(r.counts.private).reduce((a, b) => a + (b ?? 0), 0);
     record('sorter', 'mail.personal', r.ok
       ? `Checked personal Gmail: ${r.items} on your trial list, ${priv} private kept from every model, ${r.counts.flagged} flagged.${r.waiting ? ` ${r.waiting} wait for Jev.` : ''}`
-      : 'Personal Gmail check did not finish; it tries again in half an hour.', {
+      : `Personal Gmail check did not finish: ${r.error ?? 'unknown reason'}. It tries again in half an hour.`, {
       detail: { items: r.items, private: priv, flagged: r.counts.flagged, waiting: r.waiting, trigger: why, tools: 'none', sent: false },
       risk: 'none',
     });
@@ -4224,14 +4243,17 @@ export async function buildServer(
           for (const p of personals) results.push(await p.sweep());
           const merged = mergePersonal(results);
           recordPersonal(merged, 'schedule');
-          if (!merged.ok) issues.note('Personal mail', 'A personal Gmail check did not finish; it retries in half an hour.');
+          if (!merged.ok) issues.note('Personal mail', `A personal Gmail check did not finish: ${merged.error ?? 'unknown reason'}. It retries in half an hour.`);
         } catch (err) {
           app.log.warn({ err }, 'personal sweep failed');
           issues.note('Personal mail', `The personal Gmail sweep threw${err instanceof Error ? ` (${err.message})` : ''}; it retries in half an hour.`);
         }
       })();
     };
-    const pfirst = setTimeout(ptick, 90_000);
+    // Same reason as the school sweep's first tick: give the CLI repl its
+    // session before the first pass, or the first pass logs a failure that
+    // would have worked 90 seconds later.
+    const pfirst = setTimeout(ptick, 150_000);
     const pevery = setInterval(ptick, 30 * 60_000);
     pfirst.unref();
     pevery.unref();
@@ -4281,6 +4303,28 @@ export async function buildServer(
     // One pass a minute: lines anyone wrote into the issue file (the tunnel
     // supervisor has no push sender of its own) get delivered here.
     setInterval(() => issues.pushUnseen(), 60_000).unref?.();
+  }
+  /*
+   * "It ran" report. Failures already push the moment they happen, and a
+   * check that succeeds stays quiet, so the only signals the phone ever
+   * showed were problems. That reads as broken even when it isn't. This
+   * closes the loop: every CHECK_REPORT_HOURS the phone gets one line saying
+   * when each check last ran and whether it worked.
+   */
+  const checkEveryMs = Math.round(checkReportHours() * 3600_000);
+  if (!underTest && checkEveryMs > 0) {
+    const reportChecks = () => {
+      const report = buildCheckReport(ledger.list({ limit: 300 }).entries, Date.now());
+      if (!report) return;
+      // Logged, not just sent: a push that silently fails and a push that
+      // never fired look identical from the outside.
+      app.log.info({ body: report.body }, 'check report sent');
+      void nextPush.push(report).catch((err) => app.log.warn({ err }, 'check report push failed'));
+    };
+    // A first report a few minutes after boot, then on cadence: the one that
+    // matters is the first, because that is when he is deciding if it works.
+    setTimeout(reportChecks, 4 * 60_000).unref?.();
+    setInterval(reportChecks, checkEveryMs).unref?.();
   }
   if (!underTest && mailModels?.gate) {
     setInterval(() => {
@@ -4448,14 +4492,25 @@ export async function buildServer(
   );
   if (!underTest && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
     let lastNotesMtime = 0;
+    // The refreshes this records are the only honest half of the story: the
+    // other half is a sweep that FAILED. Without this a dead sweep is silent,
+    // because a file that never changes never trips the mtime check above,
+    // and the guard routine's own report of success is not evidence.
+    // Six hours of no refresh is far past the sweep's own few-hour cadence.
+    let staleNaggedFor = 0;
     setInterval(() => {
       try {
         const m = fs.statSync(schoologyExportPath).mtimeMs;
+        const now = Date.now();
         if (m !== lastNotesMtime) {
           if (lastNotesMtime !== 0) {
             record('system', 'schoology.refresh', `Schoology refreshed (data as of ${new Date(m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}).`);
           }
           lastNotesMtime = m;
+          staleNaggedFor = 0;
+        } else if (shouldNagStale(m, now, staleNaggedFor)) {
+          staleNaggedFor = m;
+          issues.note('Schoology', staleMessage(m, now));
         }
       } catch {
         /* no export yet */

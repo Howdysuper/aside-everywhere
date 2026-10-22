@@ -33,6 +33,7 @@ import type { NextSpace,
   BrowseRecentResponse,
 } from './types';
 import { considerFailover } from './relays';
+import { enqueueAction, isQueueable, kindFor } from './offlineQueue';
 
 export class ApiError extends Error {
   constructor(
@@ -42,6 +43,54 @@ export class ApiError extends Error {
     super(`${status}: ${reason}`);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * The request never reached a server, and it was one this app is willing to
+ * hold rather than lose, so it is sitting in the outbox and will be replayed
+ * when the computer answers.
+ *
+ * Distinct from ApiError because the caller has to say something different:
+ * not "that failed" but "that will send", and the UI should show the action
+ * as pending rather than discard what the user just did.
+ */
+export class OfflineQueuedError extends Error {
+  constructor(readonly label: string) {
+    super(label);
+    this.name = 'OfflineQueued';
+  }
+}
+
+/** What the pending list calls an action, from its route and payload. */
+export function queuedLabel(path: string, body: string): string {
+  let p: Record<string, unknown> = {};
+  let bare: string | null = null;
+  try {
+    const parsed: unknown = body ? JSON.parse(body) : {};
+    if (parsed && typeof parsed === 'object') p = parsed as Record<string, unknown>;
+    // `/next/:id/action` sends the action itself as the body: `"done"`.
+    else if (typeof parsed === 'string') bare = parsed;
+  } catch {
+    /* a body we cannot read still gets a generic label */
+  }
+  if (/\/sessions\/new$/.test(path) || /\/send$/.test(path)) {
+    return `New chat: ${String(p.text ?? '').slice(0, 60) || '(no text)'}`;
+  }
+  if (/\/steer$/.test(path)) return `Steer: ${String(p.text ?? '').slice(0, 60) || '(no text)'}`;
+  if (/\/tasks$/.test(path) && p.title) return `New task: ${String(p.title).slice(0, 60)}`;
+  if (/\/action$/.test(path)) {
+    const action = bare ?? String(p.action ?? 'updated');
+    const verb = action === 'done' ? 'Marked done' : action === 'dismiss' ? 'Dismissed' : action === 'later' ? 'Moved to later' : `Set ${action}`;
+    return verb;
+  }
+  if (/\/tasks\//.test(path)) return 'Moved a task';
+  if (/\/projects\/[^/]+\/milestones$/.test(path)) return `New step: ${String(p.title ?? '').slice(0, 50)}`;
+  if (/\/milestones\//.test(path)) return 'Changed a step';
+  if (/\/proposal\/(apply|discard)$/.test(path)) return `Applied a change to the plan`;
+  if (/\/pause$/.test(path)) return p.paused ? 'Paused the planner' : 'Resumed the planner';
+  if (/\/research$/.test(path)) return `Research: ${String(p.topic ?? '').slice(0, 50)}`;
+  if (/\/research\/[^/]+\/dismiss$/.test(path)) return 'Dismissed a brief';
+  return 'Saved a change';
 }
 
 let authToken = '';
@@ -88,6 +137,15 @@ export function handleUnauthorized(): void {
  */
 const CREDENTIAL_ROUTES = ['/api/pair', '/api/auth'];
 
+/**
+ * How long a replayed queued action may take before it is abandoned.
+ *
+ * Long enough for a real mutation on a busy computer, short enough that a
+ * wedged connection cannot hold the outbox shut. The action stays queued
+ * when this fires, so the only cost of being wrong is a retry.
+ */
+const REPLAY_TIMEOUT_MS = 45_000;
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body) headers.set('content-type', 'application/json');
@@ -118,6 +176,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!(err instanceof DOMException && err.name === 'AbortError')) {
       considerFailover();
     }
+    /*
+     * The phone worked and the computer did not answer. For the routes
+     * listed in offlineQueue that is not a failure to report, it is a
+     * request to keep: the action is written to the outbox and the caller
+     * is told it is pending rather than lost.
+     *
+     * An abort is never queued. Keystrokes cancel their predecessors on
+     * purpose, and replaying a cancelled request would send a message the
+     * user backed out of.
+     */
+    const method = (init.method ?? 'GET').toUpperCase();
+    if (!(err instanceof DOMException && err.name === 'AbortError') && isQueueable(method, path)) {
+      const body = typeof init.body === 'string' ? init.body : '';
+      const label = queuedLabel(path, body);
+      try {
+        await enqueueAction({ label, method: method as 'POST', path, body, kind: kindFor(path) });
+      } catch {
+        /* a queue that cannot be written leaves the original error below */
+      }
+      throw new OfflineQueuedError(label);
+    }
     throw err;
   }
   const text = await res.text();
@@ -129,6 +208,27 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, body.reason || body.error || res.statusText);
   }
   return body as T;
+}
+
+/**
+ * Send a queued action, using this module's own credential.
+ *
+ * Separate from `request` because the outbox lives across page loads and
+ * has no caller to hand a token to; it hands the raw pieces back here and
+ * lets the api module attach what only it knows. Returns the Response
+ * rather than parsed JSON so the flush can read the status itself.
+ */
+export async function replayQueued(path: string, method: string, body: string): Promise<Response> {
+  const headers = new Headers();
+  if (body) headers.set('content-type', 'application/json');
+  if (authToken) headers.set('authorization', `Bearer ${authToken}`);
+  // A hung request must not wedge the outbox. `request()` gets the same
+  // protection from the caller's own signal; a replay has no caller, so the
+  // deadline lives here. Without it one connection that never settles would
+  // leave the flush "in progress" for the life of the page, and every later
+  // sync would collapse into it and silently do nothing.
+  const signal = AbortSignal.timeout(REPLAY_TIMEOUT_MS);
+  return fetch(path, { method, body: body || undefined, credentials: 'same-origin', headers, signal });
 }
 
 export const api = {

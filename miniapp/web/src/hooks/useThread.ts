@@ -58,6 +58,13 @@ const OFFLINE_POLL_MS = 4_000;
 /** Give up on an un-echoed optimistic bubble after this long. */
 const PENDING_TTL_MS = 120_000;
 
+/**
+ * How many times an empty thread that failed to load is retried before the
+ * error card appears. The failure being covered is a cold-start race of a
+ * second or two, so this only has to outlast it.
+ */
+const LOAD_RETRIES = 4;
+
 export interface PendingMessage {
   text: string;
   attachments: Attachment[];
@@ -256,6 +263,17 @@ export function useThread(sessionId: string): ThreadState {
     });
   }, []);
   const [activity, setActivity] = useState<ThreadState['activity']>(null);
+  /**
+   * Failed load attempts for the thread currently on screen.
+   *
+   * A brand-new chat can be asked for before its transcript exists on disk:
+   * the server creates the session, answers `newSession` with an id, and
+   * writes the file a moment later. The phone navigates on the id and can
+   * lose that race, which used to be terminal -- one `session_not_found`
+   * and the person who had just tapped send was told the chat they were
+   * looking at did not exist, permanently, with no retry anywhere.
+   */
+  const loadAttempts = useRef<{ id: string; n: number; timer?: number }>({ id: '', n: 0 });
   const [pending, setPending] = useState<PendingMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +334,8 @@ export function useThread(sessionId: string): ThreadState {
   const load = useCallback(async () => {
     const revision = transcriptRevision.current;
     const sequence = ++loadSequence.current;
+    // A different chat starts its retry budget over.
+    if (loadAttempts.current.id !== sessionId) loadAttempts.current = { id: sessionId, n: 0 };
     /*
      * The cached copy of this thread, if this device has one. Painted
      * below the moment it is read, before the network answers, so an
@@ -379,7 +399,30 @@ export function useThread(sessionId: string): ThreadState {
       // With something already painted (the cache above, or socket
       // deltas), a failed refresh keeps the thread readable rather than
       // blanking it for a banner. The error matters only on an empty view.
-      if (itemsRef.current.length === 0) setError(threadErrorText(err));
+      if (itemsRef.current.length > 0) return;
+      /*
+       * An empty view that failed to load is usually the cold-start race
+       * described above, not a chat that is gone. Retry with backoff and
+       * only report once those are spent: a genuinely deleted chat still
+       * says so, a few seconds later, and a chat that is merely young says
+       * nothing at all.
+       */
+      if (loadAttempts.current.id !== sessionId) loadAttempts.current = { id: sessionId, n: 0 };
+      loadAttempts.current.n += 1;
+      if (loadAttempts.current.n <= LOAD_RETRIES) {
+        // Not guarded on `sequence`: the retry starts a fresh load, which
+        // supersedes on its own by bumping loadSequence. Guarding on it here
+        // would disqualify every retry by construction.
+        // 400ms, 800ms, 1s, 1s. Long enough to outlast the race, short enough
+        // that a chat which really is gone says so before the person has
+        // stopped looking at the screen.
+        const wait = Math.min(400 * loadAttempts.current.n, 1_000);
+        loadAttempts.current.timer = window.setTimeout(() => {
+          if (alive.current && loadAttempts.current.id === sessionId) void load();
+        }, wait);
+        return;
+      }
+      setError(threadErrorText(err));
     } finally {
       // Only the newest load may end the loading state. A superseded one
       // (a re-run effect, or a reconnect refetch racing the first load)
@@ -539,6 +582,8 @@ export function useThread(sessionId: string): ThreadState {
       disposed = true;
       alive.current = false;
       window.clearTimeout(connectCeiling);
+      // A retry that was already queued must not fire into a dead view.
+      if (loadAttempts.current.timer !== undefined) window.clearTimeout(loadAttempts.current.timer);
       ws.close();
       socket.current = null;
       if (streamRaf.current) {

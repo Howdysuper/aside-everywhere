@@ -85,7 +85,7 @@ export class WebPushSender implements Sender {
     // Apple's web push (iOS home-screen PWA) rejects placeholder subjects
     // like mailto:aside-local@localhost with a silent 403, so this must be
     // a real address; it matches VAPID_SUBJECT in the front door worker.
-    webpush.setVapidDetails(VAPID_SUBJECT, keys.publicKey, keys.privateKey);
+    webpush.setVapidDetails('mailto:shaurya.nadagoudra@gmail.com', keys.publicKey, keys.privateKey);
     try {
       this.subs = JSON.parse(fs.readFileSync(this.subsPath, 'utf8'));
       if (!Array.isArray(this.subs)) this.subs = [];
@@ -192,7 +192,9 @@ export const SANE_START = 6 * 60 + 45; // 06:45
 export const SANE_END = 22 * 60 + 30; // 22:30
 const DIGEST_AFTER = 6 * 60 + 45; // earliest morning digest
 const DAILY_CAP = 15;
-const STALL_AFTER_MS = 26 * 60 * 60 * 1000;
+// Half a day, not 26 hours: the sweep runs every few hours, so 26 h meant
+// five-plus missed passes before the phone said anything at all.
+const STALL_AFTER_MS = 12 * 60 * 60 * 1000;
 const SOON_MS = 2 * 60 * 60 * 1000;
 const LATE_MS = 12 * 60 * 60 * 1000;
 const W3_MS = 21 * 86400000;
@@ -620,9 +622,3 @@ export class NextPush {
     });
   }
 }
-
-
-/** Web push subject: a real address, per deploy. Apple's push service rejects
- *  a placeholder like mailto:aside-local@localhost with a silent 403. Override
- *  with MINIAPP_VAPID_SUBJECT, e.g. mailto:you@example.com. */
-const VAPID_SUBJECT = process.env.MINIAPP_VAPID_SUBJECT ?? 'mailto:you@example.com';

@@ -30,7 +30,9 @@ import {
   listScript,
   parseClassification,
   redact,
+  replFailureReason,
   runFixed,
+  runFixedRetry,
   scanText,
   threadsScript,
   tokenizeLinks,
@@ -322,12 +324,22 @@ export class PersonalSweeper {
       // sat under newer mail) was invisible. Search sees read mail too, in
       // every category (college and award mail often lands in Updates or
       // Promotions), and the Jev gate still drops the real marketing.
-      listed = (await runFixed(this.repl, (mk) => listScript(this.o.account, PERSONAL_QUERY, mk, this.o.index))) as typeof listed;
+      listed = (await runFixedRetry(this.repl, (mk) => listScript(this.o.account, PERSONAL_QUERY, mk, this.o.index), 3, log)) as typeof listed;
     } catch (e) {
       log('personal list failed', String(e));
-      return fail('fetch_failed');
+      return fail(replFailureReason(e));
     }
-    if (!listed || listed.error || !Array.isArray(listed.threads)) return fail(listed?.error ?? 'fetch_failed');
+    if (!listed || listed.error || !Array.isArray(listed.threads)) {
+      const why = !listed
+        ? 'the CLI returned no readable result'
+        : listed.error === 'no_account'
+          ? 'no matching mail account'
+          : listed.error
+            ? replFailureReason(listed.error)
+            : 'the CLI returned an unexpected reply';
+      log('personal list unusable', { why, error: listed?.error });
+      return fail(why);
+    }
     const listedThreads = listed.threads.filter((t) => /^thread-f:\d{6,25}$/.test(t.id));
 
     const cache = this.readCache();
@@ -341,7 +353,7 @@ export class PersonalSweeper {
     for (let i = 0; i < staleIds.length; i += 25) {
       let got = null as { threads?: Array<(MailThread & { error?: string })> } | null;
       try {
-        got = (await runFixed(this.repl, (mk) => threadsScript(this.o.account, staleIds.slice(i, i + 25), mk, false, this.o.index))) as typeof got;
+        got = (await runFixedRetry(this.repl, (mk) => threadsScript(this.o.account, staleIds.slice(i, i + 25), mk, false, this.o.index), 3, log)) as typeof got;
       } catch (e) {
         log('personal threads failed', String(e));
       }

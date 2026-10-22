@@ -106,7 +106,8 @@ import { AsideSymbol, ChevronDown, ChevronLeft, Globe, MoreVertical, Spinner } f
 import { LiveBrowserCard } from './components/LiveBrowser';
 import { withoutResolvedErrors } from './utils/resolvedErrors';
 import type { CitationMark } from './utils/citations';
-import { api, setAuthToken, setUnauthorizedHandler } from './api';
+import { api, setAuthToken, setUnauthorizedHandler, OfflineQueuedError } from './api';
+import { startOutboxSync } from './offlineSync';
 import {
   PHONE_OFFLINE_MESSAGE,
   clearStoredToken,
@@ -124,6 +125,7 @@ import { PullToRefresh } from './components/PullToRefresh';
 import { playSound } from './utils/sounds';
 import { InstallHint } from './components/InstallHint';
 import { RelayBanner } from './components/RelayBanner';
+import { PendingSyncPill } from './components/PendingSyncPill';
 import { setRefreshedRelays } from './relays';
 import { useThread } from './hooks/useThread';
 import { useAttachments } from './hooks/useAttachments';
@@ -846,6 +848,10 @@ export default function App() {
       (res) => setRefreshedRelays(res.relays.map((entry) => entry.url)),
       () => {},
     );
+    // Changes made on the phone while the computer was asleep. Loading the
+    // queue and attempting one flush here is what turns "your computer has
+    // to be on" into "it caught up when you opened the app".
+    void startOutboxSync();
   }, [auth.phase, loadSessions]);
 
   // The desktop catalog can change while the installed app stays alive.
@@ -1090,8 +1096,18 @@ export default function App() {
       attachments.clear();
       await loadSessions();
       openThread({ id: res.sessionId });
-    } catch {
-      // Surfaced as an error card once the turn reports back.
+    } catch (err) {
+      /*
+       * The computer is asleep. The message is in the outbox and the pill
+       * is on screen, so this is not a silent failure: clear the draft the
+       * way a successful send would, and say where it went.
+       */
+      if (err instanceof OfflineQueuedError) {
+        setDraft('');
+        attachments.clear();
+        toast('Saved on your phone. It sends when your computer is on.', { tone: 'info', duration: 4 });
+      }
+      // Anything else is surfaced as an error card once the turn reports back.
     } finally {
       setSending(false);
     }
@@ -1258,6 +1274,7 @@ export default function App() {
         */}
         <InstallHint />
         <RelayBanner />
+        <PendingSyncPill />
         {/*
           One scroller holding two full panels. The composer is NOT in it:
           it is docked below, so the software keyboard cannot push it out
@@ -1951,6 +1968,18 @@ function ThreadScreen({
         effort: effective.effortId,
         attachments: files.map((f) => f.path!).filter(Boolean),
       });
+    } catch (err) {
+      /*
+       * The computer is asleep and this message now lives in the outbox.
+       * The optimistic bubble is already on screen, so the only thing left
+       * to say is that it is waiting rather than lost. Anything else is a
+       * real failure and keeps its existing path.
+       */
+      if (err instanceof OfflineQueuedError) {
+        toast('Saved on your phone. It sends when your computer is on.', { tone: 'info', duration: 4 });
+      } else {
+        throw err;
+      }
     } finally {
       setSending(false);
     }

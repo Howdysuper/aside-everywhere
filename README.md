@@ -76,6 +76,31 @@ Two independent decision models keep it cheap and fast:
 
 That split is what makes hourly sweeps affordable: the expensive model only sees mail that already passed a cheap judgment.
 
+### Works with the computer off
+
+The app has always opened offline. What it could not do was *change* anything: the service worker serves the cached shell and the plan paints from the last copy the phone saw, but the first tap on "done" or "send" died on a dead network call. Reads were solved; writes were not.
+
+So writes are now queued. An action that cannot reach the computer is recorded in an IndexedDB outbox instead of thrown away, and replayed in order the moment the computer answers again — on the browser's `online` event, when you come back to the app, on a slow safety sweep, and once at boot.
+
+```
+  tap "done" ──▶ fetch ──✗ (computer asleep)
+                     │
+                     ▼
+            ┌─────────────────┐
+            │  local outbox   │──▶ replay when it can
+            │  (IndexedDB)    │      · oldest first
+            └─────────────────┘      · one at a time
+                     │
+                     ▼
+            "2 changes waiting"     ← a pill, named, tap to send now
+```
+
+A pill on the home screen names what is waiting, so a queue nobody can see is indistinguishable from a queue that ate the action.
+
+Only routes that are safe to repeat are queued. Marking an item done, adding a task, moving it, pausing the planner, and sending a message are all idempotent enough to replay. **Starting an agent and triggering a sweep are not** — those do real work on the computer, and replaying one unattended hours later is a decision a person should make while the computer is on. Those keep failing loudly, as they do today.
+
+A failed flush reports which of four things happened rather than one generic error: the computer is still away (keep everything), the credential needs re-pairing (stop), the server refused that specific action (drop it with its reason so one bad action cannot jam the ones behind it), or the server is having a moment (leave it queued).
+
 ---
 
 ## Documentation

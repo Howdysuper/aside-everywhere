@@ -4313,18 +4313,35 @@ export async function buildServer(
    */
   const checkEveryMs = Math.round(checkReportHours() * 3600_000);
   if (!underTest && checkEveryMs > 0) {
-    const reportChecks = () => {
-      const report = buildCheckReport(ledger.list({ limit: 300 }).entries, Date.now());
+    /*
+     * Polls cheaply every minute, pushes when a check has actually finished
+     * since the last report. That is the difference between "a timer fired"
+     * and "the thing he asked to be told about just happened": a fixed clock
+     * can land in the middle of a dead hour and say all-clear, or fire right
+     * before a check lands and miss it.
+     */
+    let lastReportAt = 0;
+    let lastSeq = 0;
+    const reportChecks = (force: boolean) => {
+      const now = Date.now();
+      if (!force && now - lastReportAt < checkEveryMs) return;
+      const all = ledger.list({ limit: 300 });
+      const seq = all.entries[0]?.seq ?? 0;
+      const report = buildCheckReport(all.entries, now);
       if (!report) return;
+      // Without force, only speak for something that ran since last time.
+      if (!force && seq <= lastSeq) return;
+      lastReportAt = now;
+      lastSeq = seq;
       // Logged, not just sent: a push that silently fails and a push that
       // never fired look identical from the outside.
       app.log.info({ body: report.body }, 'check report sent');
       void nextPush.push(report).catch((err) => app.log.warn({ err }, 'check report push failed'));
     };
-    // A first report a few minutes after boot, then on cadence: the one that
-    // matters is the first, because that is when he is deciding if it works.
-    setTimeout(reportChecks, 4 * 60_000).unref?.();
-    setInterval(reportChecks, checkEveryMs).unref?.();
+    // No forced boot report: the interval's first tick would push anyway
+    // (lastSeq starts at 0), and a separate timer fired on the same second
+    // as a tick produced two reports three minutes apart.
+    setInterval(() => reportChecks(false), 60_000).unref?.();
   }
   if (!underTest && mailModels?.gate) {
     setInterval(() => {

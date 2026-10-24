@@ -98,6 +98,6 @@ export function buildCheckReport(entries: CheckEntry[], now = Date.now()): { tit
 
 /** Hours between reports; 0 disables. Overridable without a rebuild. */
 export function checkReportHours(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = Number(env.CHECK_REPORT_HOURS ?? 2);
+  const raw = Number(env.CHECK_REPORT_HOURS ?? 1);
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 24) : 0;
 }
